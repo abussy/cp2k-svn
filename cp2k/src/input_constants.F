@@ -619,6 +619,10 @@ MODULE input_constants
    INTEGER, PARAMETER, PUBLIC               :: xas_scf_default = 0, &
                                                xas_scf_general = 1
 
+   ! Time-dependent XAS
+   INTEGER, PARAMETER, PUBLIC               :: xas_tdp_by_index = 1, &
+                                               xas_tdp_by_kind = 2
+
    ! Linear Response for properties
    INTEGER, PARAMETER, PUBLIC               :: lr_none = 0, &
                                                lr_chemshift = 1, &
