@@ -230,6 +230,7 @@ CONTAINS
          END IF
          DEALLOCATE (xas_tdp_env)
       END IF
+      PRINT*, "Deallocate the xas_tdp environment type"
    END SUBROUTINE xas_tdp_env_release
 
 !> *************************************************************************************************
@@ -248,7 +249,7 @@ CONTAINS
       CPASSERT(ASSOCIATED(xas_tdp_env))
 
       IF (PRESENT(nex_atoms)) nex_atoms = xas_tdp_env%nex_atoms
-      IF (PRESENT(nex_kinds)) nex_kinds  =xas_tdp_env%nex_kinds
+      IF (PRESENT(nex_kinds)) nex_kinds = xas_tdp_env%nex_kinds
       IF (PRESENT(ex_atomic_kind_set)) ex_atomic_kind_set => xas_tdp_env%ex_atomic_kind_set
          
 
@@ -257,12 +258,26 @@ CONTAINS
 !> *************************************************************************************************
 !> \brief Sets values of selected variables within the TDP XAS environment type
 !> *************************************************************************************************
-   SUBROUTINE set_xas_tdp_env(xas_tdp_env)
+   SUBROUTINE set_xas_tdp_env(xas_tdp_env,nex_atoms,nex_kinds,ex_atomic_kind_set)
 
       TYPE(xas_tdp_env_type), POINTER                    :: xas_tdp_env
 
       CHARACTER(len=*), PARAMETER                        :: routineN = 'set_xas_tdp_env',&
                                                             routineP = moduleN//':'//routineN
+
+      INTEGER, INTENT(IN), OPTIONAL                      :: nex_atoms,nex_kinds
+      TYPE(atomic_kind_type), DIMENSION(:),&
+                           POINTER, OPTIONAL             :: ex_atomic_kind_set
+
+      IF (PRESENT(nex_atoms)) xas_tdp_env%nex_atoms = nex_atoms
+      IF (PRESENT(nex_kinds)) xas_tdp_env%nex_kinds = nex_kinds
+      IF (PRESENT(ex_atomic_kind_set)) THEN
+         IF (ASSOCIATED(xas_tdp_env%ex_atomic_kind_set)) THEN
+            CALL deallocate_atomic_kind_set(xas_tdp_env%ex_atomic_kind_set)
+         END IF
+         ALLOCATE(xas_tdp_env%ex_atomic_kind_set(SIZE(ex_atomic_kind_set)))
+         xas_tdp_env%ex_atomic_kind_set = ex_atomic_kind_set
+      END IF
 
       CPASSERT(ASSOCIATED(xas_tdp_env))
       
