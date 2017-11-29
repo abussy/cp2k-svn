@@ -1079,7 +1079,7 @@ CONTAINS
       CHARACTER(len=*), PARAMETER :: routineN = 'calculate_exx', routineP = moduleN//':'//routineN
 
       INTEGER                                            :: handle, i, irep, n_rep_hf, ns
-      REAL(KIND=dp)                                      :: ehfx, t1, t2
+      REAL(KIND=dp)                                      :: eh1, ehfx, t1, t2
       TYPE(cp_para_env_type), POINTER                    :: para_env
       TYPE(dbcsr_p_type), DIMENSION(:), POINTER          :: matrix_ks, matrix_ks_aux_fit, rho_ao
       TYPE(dbcsr_p_type), DIMENSION(:, :), POINTER       :: matrix_ks_2d, rho_ao_2d
@@ -1140,6 +1140,7 @@ CONTAINS
          energy%ex = E_ex_from_GW
       ELSE
 
+         ehfx = 0.0_dp
          DO irep = 1, n_rep_hf
             ns = SIZE(rho_ao)
             rho_ao_2d(1:ns, 1:1) => rho_ao(1:ns)
@@ -1149,9 +1150,10 @@ CONTAINS
             ELSE
                matrix_ks_2d(1:ns, 1:1) => matrix_ks(1:ns)
             END IF
-            CALL integrate_four_center(qs_env, matrix_ks_2d, ehfx, rho_ao_2d, hfx_sections, &
+            CALL integrate_four_center(qs_env, matrix_ks_2d, eh1, rho_ao_2d, hfx_sections, &
                                        para_env, .TRUE., irep, .TRUE., &
                                        ispin=1, do_exx=.TRUE.)
+            ehfx = ehfx+eh1
          END DO
 
          ! include the EXX contribution to the total energy
@@ -1197,7 +1199,7 @@ CONTAINS
                                                             n_rep_hf, nmo, ns
       LOGICAL                                            :: charge_constrain_tmp, do_admm_rpa, &
                                                             do_hfx, do_mix_exchange, do_ri_Sigma_x
-      REAL(KIND=dp)                                      :: ehfx, frac_exx, hfx_fraction, t1, t2
+      REAL(KIND=dp)                                      :: eh1, ehfx, frac_exx, hfx_fraction, t1, t2
       REAL(KIND=dp), ALLOCATABLE, DIMENSION(:, :)        :: vec_Sigma_x_minus_vxc_gw
       TYPE(admm_type), POINTER                           :: admm_env
       TYPE(cp_fm_type), POINTER                          :: mo_coeff
@@ -1381,6 +1383,7 @@ CONTAINS
 
       ! in most cases, we calculate the exchange self-energy here. But if we do only RI for
       ! the exchange self-energy, we do not calculate exchange here
+      ehfx = 0.0_dp
       IF (.NOT. do_ri_Sigma_x .OR. do_mix_exchange) THEN
 
          ! add here HFX (=Sigma_exchange) to matrix_sigma_x_minus_vxc
@@ -1394,12 +1397,13 @@ CONTAINS
                matrix_ks_2d(1:ns, 1:1) => matrix_ks(1:ns)
             END IF
 
-            CALL integrate_four_center(qs_env, matrix_ks_2d, ehfx, rho_ao_2d, hfx_sections, &
+            CALL integrate_four_center(qs_env, matrix_ks_2d, eh1, rho_ao_2d, hfx_sections, &
                                        para_env, .TRUE., irep, .TRUE., &
                                        ispin=1, do_exx=.TRUE.)
+            ehfx = ehfx+eh1
          END DO
-
       END IF
+      energy_ex = ehfx
 
       ! transform Fock-Matrix (calculated in integrate_four_center, written in matrix_ks_aux_fit in case
       ! of ADMM) from ADMM basis to primary basis
@@ -1416,8 +1420,6 @@ CONTAINS
       DO ispin = 1, dft_control%nspins
          CALL dbcsr_add(matrix_sigma_x_minus_vxc(ispin)%matrix, matrix_ks(ispin)%matrix, 1.0_dp, frac_exx)
       END DO
-
-      energy_ex = ehfx
 
       CALL dbcsr_desymmetrize(matrix_ks(1)%matrix, mo_coeff_b)
       CALL dbcsr_set(mo_coeff_b, 0.0_dp)
