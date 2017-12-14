@@ -81,9 +81,9 @@ MODULE xas_tdp_types
 !> \param kind_index the index of the atomic kind to which the state belongs
 !> \param at_symbol the chemical symbol of the atom to which the state belongs
 !> \param state_type whether this is a 1s, 2s, etc state
-!> \param energy_eval the energy eigenvalue of the donor state (diagonal value epsilon_ii if 
-!>                    non-canonical MOs) 
-!> \param mo_index index of the associated MO
+!> \param energy_evals the energy eigenvalue of the donor state (if canonical orbitals), or the set
+!>        of epsilon_ij (if  non-canonical MOs) 
+!> \param mo_indices indices of associated MOs. Greater than 1 when not a s-type state.
 !> \param lr_coeffs solutions of the linear-response TDDFT equation retricted to this state
 !> *************************************************************************************************
 TYPE donor_state_type
@@ -91,8 +91,8 @@ TYPE donor_state_type
       INTEGER                                 :: kind_index
       CHARACTER(len=2)                        :: at_symbol
       INTEGER                                 :: state_type
-      REAL(dp)                                :: energy_eval
-      INTEGER                                 :: mo_index
+      REAL(dp), DIMENSION(:,:), POINTER       :: energy_evals
+      INTEGER, DIMENSION(:), POINTER          :: mo_indices
       TYPE(cp_fm_type), POINTER               :: lr_coeffs
    END TYPE donor_state_type
 
@@ -244,7 +244,7 @@ CONTAINS
       CALL section_vals_val_get(xas_tdp_section, "STATE_SEARCH", i_val=xas_tdp_control%n_search)
 
       CALL section_vals_val_get(xas_tdp_section, "NGAUSS", i_val=xas_tdp_control%n_gauss)
-     
+      
       xas_tdp_control%loc_subsection => section_vals_get_subs_vals(xas_tdp_section, "LOCALIZE")       
       xas_tdp_control%print_loc_subsection => section_vals_get_subs_vals(&
                                                          xas_tdp_control%loc_subsection, "PRINT")                      
@@ -330,27 +330,22 @@ CONTAINS
 !> \param at_symbol ...
 !> \param state_type ...   
 !> *************************************************************************************************
-   SUBROUTINE set_donor_state(donor_state, at_index, at_symbol, kind_index, mo_index, energy_eval,&
-                              state_type)
+   SUBROUTINE set_donor_state(donor_state, at_index, at_symbol, kind_index, state_type)
 
       TYPE(donor_state_type), POINTER                      :: donor_state
 
       CHARACTER(len=*), PARAMETER                          :: routineN = 'set_donor_state',&
                                                               routineP = moduleN//':'//routineN
 
-      INTEGER, INTENT(IN), OPTIONAL                        :: at_index, state_type, kind_index,&
-                                                              mo_index
+      INTEGER, INTENT(IN), OPTIONAL                        :: at_index, state_type, kind_index
       CHARACTER(len=2), INTENT(IN), OPTIONAL               :: at_symbol
-      REAL(dp), INTENT(IN), OPTIONAL                       :: energy_eval
       
       CPASSERT(ASSOCIATED(donor_state))
 
       IF (PRESENT(at_index)) donor_state%at_index = at_index
       IF (PRESENT(kind_index)) donor_state%kind_index = kind_index
-      IF (PRESENT(mo_index)) donor_state%mo_index = mo_index
       IF (PRESENT(state_type)) donor_state%state_type = state_type
       IF (PRESENT(at_symbol)) donor_state%at_symbol = at_symbol
-      IF (PRESENT(energy_eval)) donor_state%energy_eval = energy_eval
 
    END SUBROUTINE set_donor_state   
 
@@ -370,6 +365,14 @@ SUBROUTINE deallocate_donor_state_set(donor_state_set)
 
             IF (ASSOCIATED(donor_state_set(i)%lr_coeffs)) THEN
                CALL cp_fm_release(donor_state_set(i)%lr_coeffs)
+            END IF
+
+            If (ASSOCIATED(donor_state_set(i)%energy_evals)) THEN
+               DEALLOCATE(donor_state_set(i)%energy_evals)
+            END IF
+
+            IF (ASSOCIATED(donor_state_set(i)%mo_indices)) THEN
+               DEALLOCATE(donor_state_set(i)%mo_indices)
             END IF
             
          END DO

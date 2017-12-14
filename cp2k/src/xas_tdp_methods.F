@@ -19,32 +19,45 @@ MODULE xas_tdp_methods
                                               init_orb_basis_set
    USE cell_types,                      ONLY: cell_type,&
                                               pbc
-   USE cp_array_utils,                  ONLY: cp_2d_r_p_type
+   USE cp_blacs_env,                    ONLY: cp_blacs_env_type
    USE cp_control_types,                ONLY: dft_control_type
-   USE cp_fm_types,                     ONLY: cp_fm_type, cp_fm_get_submatrix
+   USE cp_dbcsr_operations,             ONLY: cp_dbcsr_sm_fm_multiply
+   USE cp_fm_struct,                    ONLY: cp_fm_struct_type, cp_fm_struct_create,&
+                                              cp_fm_struct_release
+   USE cp_fm_types,                     ONLY: cp_fm_type, cp_fm_get_submatrix, cp_fm_create,&
+                                              cp_fm_release, cp_fm_set_all, cp_fm_p_type,&
+                                              cp_fm_get_info, cp_fm_to_fm_submat
+   USE cp_gemm_interface,               ONLY: cp_gemm
    USE cp_log_handling,                 ONLY: cp_get_default_logger,&
                                               cp_logger_type
-   USE cp_output_handling,              ONLY: cp_print_key_unit_nr
+   USE cp_para_types,                   ONLY: cp_para_env_type
+   USE cp_output_handling,              ONLY: cp_print_key_unit_nr, debug_print_level
+   USE dbcsr_api,                       ONLY: dbcsr_p_type
    USE input_constants,                 ONLY: xas_tdp_by_index,&
                                               xas_tdp_by_kind,&
                                               xas_not_excited,&
                                               do_loc_none,&
                                               xas_1s_type,&
-                                              xas_2s_type
+                                              xas_2s_type,&
+                                              op_loc_berry
    USE input_section_types,             ONLY: section_vals_type,&
-                                              section_vals_get_subs_vals
+                                              section_vals_get_subs_vals,&
+                                              section_vals_val_set
    USE kinds,                           ONLY: dp
    USE particle_methods,                ONLY: get_particle_set
    USE particle_types,                  ONLY: particle_type
    USE periodic_table,                  ONLY: ptable
+   USE physcon,                         ONLY: angstrom
    USE qs_environment_types,            ONLY: qs_environment_type,&
                                               get_qs_env
    USE qs_kind_types,                   ONLY: get_qs_kind,&   
                                               qs_kind_type
-   USE qs_loc_methods,                  ONLY: qs_loc_driver
+   USE qs_loc_methods,                  ONLY: qs_loc_driver,&
+                                              centers_spreads_berry
    USE qs_loc_types,                    ONLY: localized_wfn_control_type,&
                                               qs_loc_env_create,&
-                                              qs_loc_env_new_type
+                                              qs_loc_env_new_type,&
+                                              get_qs_loc_env
    USE qs_loc_utils,                    ONLY: qs_loc_control_init,&
                                               qs_loc_env_init,&
                                               set_loc_centers,&
@@ -87,7 +100,7 @@ CONTAINS
       CHARACTER(len=*), PARAMETER :: routineN = 'xas_tdp', routineP = moduleN//':'//routineN
 
       INTEGER                                            :: handle, ikind, iat, istate, tmp_index,&
-                                                            current_state_index, output_unit, itest
+                                                            current_state_index, output_unit
       TYPE(xas_tdp_env_type), POINTER                    :: xas_tdp_env
       TYPE(xas_tdp_control_type), POINTER                :: xas_tdp_control
       TYPE(atomic_kind_type), DIMENSION(:), POINTER      :: atomic_kind_set
@@ -113,13 +126,8 @@ CONTAINS
          WRITE(UNIT=output_unit, FMT="(/,T3,A,/,T3,A,/,T3,A,/,T3,A,/)") &
             "!===========================================================================!", &
             "!                              XAS TDP                                      !", &
-            "!    Starting TDDFPT deriven X-rays absorption spectroscopy calculations    !", &
+            "!    Starting TDDFPT driven X-rays absorption spectroscopy calculations     !", &
             "!===========================================================================!"
-      END IF
-
-!  Safety checks
-      IF (dft_control%lsd) THEN
-         CPABORT("XAS TDP only implemented for closed shell ground state calculations")
       END IF
       
 !  Initialization
@@ -128,6 +136,16 @@ CONTAINS
             "# Create and initialize the XAS_TDP environment"
       END IF 
       CALL xas_tdp_init(xas_tdp_env, xas_tdp_control, qs_env, dft_control)
+
+!  Safety checks
+      IF (dft_control%lsd) THEN
+         CPABORT("XAS TDP only implemented for closed shell ground state calculations")
+      END IF
+      IF (xas_tdp_env%qs_loc_env%do_localize .AND. &
+          xas_tdp_env%qs_loc_env%localized_wfn_control%operator_type .NE. op_loc_berry) THEN
+         CPABORT("Please use the Berry phase operator for MO localization.")
+      END IF
+
       
 !  Localization of the core orbitals if requested (used for better identification of donor states)
       IF (xas_tdp_env%qs_loc_env%do_localize) THEN
@@ -138,25 +156,26 @@ CONTAINS
 !        closed shell => myspin=1
          CALL qs_loc_driver(qs_env, xas_tdp_env%qs_loc_env, xas_tdp_control%print_loc_subsection,&
                            myspin=1)
+
+!  If no active localization, need to find centers and spreads of MO
+      ELSE IF (.NOT. xas_tdp_env%qs_loc_env%do_localize) THEN
+         CALL find_mo_centers(xas_tdp_env, xas_tdp_control, qs_env)
       END IF
       
 !  Assign lowest energy orbitals to excited atoms
-      IF (xas_tdp_env%qs_loc_env%do_localize) THEN 
-         CALL assign_loc_mos_to_ex_atoms(xas_tdp_env, xas_tdp_control, qs_env) 
-      ELSE IF (.NOT. xas_tdp_env%qs_loc_env%do_localize) THEN
-!        If no localization done, it is assumed that core orbitals are easily found with STO
-!        overlap only. Then keep all possible links between MOs and donor states at this point
-         xas_tdp_env%mos_of_ex_atoms(:,:) = 1
-      END IF
+      CALL assign_mos_to_ex_atoms(xas_tdp_env, xas_tdp_control, qs_env) 
+
 !     for test purposes
       PRINT*, "Test for mos_of_ex_atoms:"
       DO iat = 1,xas_tdp_control%n_search
          PRINT*, xas_tdp_env%mos_of_ex_atoms(iat,:)
       END DO
       IF (output_unit > 0) THEN
-         WRITE(UNIT=output_unit, FMT="(/,T3,A)") &
-            "# Assign the ", xas_tdp_control%n_search,"  lowest energy MOs to excited atoms"
+         WRITE(UNIT=output_unit, FMT="(/,T3,A,I4,A,/)") &
+            "# Assign the relevant subset of the ", xas_tdp_control%n_search, &
+            "  lowest energy MOs to excited atoms"
       END IF
+      CALL write_mos_to_ex_atoms_association(xas_tdp_env, qs_env, output_unit)     
 
 !  Loop over donor states for calculation
 
@@ -186,7 +205,7 @@ CONTAINS
                                           at_symbol=symbol_of_kind, kind_index=ikind,&
                                           state_type=xas_tdp_env%state_types(istate,tmp_index))
 
-!                    Assign best fitting MO to current donnor core state
+!                    Assign best fitting MO(s) to current donnor core state
                      
                      PRINT*, "Assigning MO for donor state with properties: "
                      PRINT*, "Chemical symbol: ", current_state%at_symbol
@@ -197,13 +216,9 @@ CONTAINS
                      CALL assign_mo_to_donor_state(current_state, xas_tdp_env,&
                                                    xas_tdp_control, qs_env)
 
-                     PRINT*, "mos_of_ex_atoms after assignment"
-                     DO itest = 1,xas_tdp_control%n_search
-                        PRINT*, xas_tdp_env%mos_of_ex_atoms(itest,:) 
-                     END DO
-
-                     PRINT*, "Index of newly associated MO: ", current_state%mo_index
-                     PRINT*, "Energy eval of MO: ", current_state%energy_eval
+                     PRINT*, "Indices of newly associated MOs: ", current_state%mo_indices
+                     PRINT*, "Energy evals of donor state: ", current_state%energy_evals
+                     PRINT*, " "
 
                      current_state_index = current_state_index + 1
                      NULLIFY(current_state)
@@ -218,21 +233,11 @@ CONTAINS
       IF (output_unit > 0) THEN
          WRITE(UNIT=output_unit, FMT="(/,T3,A,/,T3,A,/,T3,A,/)") &
             "!===========================================================================!", &
-            "!     End of TDDFPT deriven X-rays absorption spectroscopy calculations     !", &
+            "!     End of TDDFPT driven X-rays absorption spectroscopy calculations      !", &
             "!===========================================================================!"   
       END IF
 
       CALL timestop(handle)
-
-!  Structure would look like:
-!     - Initialization of the xas_tdp_control
-!     - Initialization of the xas_tdp_env (including allocation of the donor_state_type array)
-!     - Loop over kinds, then atoms of kind, then states of atom of kind
-!        - At this point initialize specific donor_state_types
-!        - Do calculation for specific donor_state_type
-!     - Collect and print results
-!     - Release all types
-
 
    END SUBROUTINE xas_tdp
    
@@ -358,6 +363,7 @@ CONTAINS
                               qs_env, myspin=1, do_localize=qs_loc_env%do_localize) 
       END IF
       
+      
 !  Allocating memory for the array of excited atoms MOs. Worst case senario, all searched MOs are
 !  associated to the same atom
    ALLOCATE(xas_tdp_env%mos_of_ex_atoms(xas_tdp_control%n_search, nex_atoms))
@@ -366,21 +372,24 @@ CONTAINS
    END SUBROUTINE xas_tdp_init
 
 !> *************************************************************************************************
-!> \brief Assosciate previously localized lowest energy  MOs to each excited atoms. The procedure
-!>        looks for MOs "centered" on the excited atom using the same method as the loc process. It
+!> \brief Assosciate (possibly localized) lowest energy  MOs to each excited atoms. The procedure
+!>        looks for MOs "centered" on the excited atoms by comparing distances. It
 !>        then fills the mos_of_ex_atoms arrays of the xas_tdp_env. Only the xas_tdp_control%n_search
 !>        lowest energy MOs are considered. Largely inspired by MI's implementation of XAS
+!>        It is assumed that the Berry phase is used to compute centers.
 !> \param xas_tdp_env ...
 !> \param xas_tdp_control ...
 !> \param qs_env ...
+!> \note Whether localization took place or not, the procedure is the same as centers are stored in 
+!>       xas_tdp_env%qs_loc_env%localized_wfn_control%centers_set
 !> *************************************************************************************************
-   SUBROUTINE assign_loc_mos_to_ex_atoms(xas_tdp_env, xas_tdp_control, qs_env)
+   SUBROUTINE assign_mos_to_ex_atoms(xas_tdp_env, xas_tdp_control, qs_env)
       
       TYPE(qs_environment_type), POINTER                 :: qs_env
       TYPE(xas_tdp_env_type), POINTER                    :: xas_tdp_env
       TYPE(xas_tdp_control_type), POINTER                :: xas_tdp_control
 
-      CHARACTER(len=*), PARAMETER :: routineN = 'assign_loc_mos_to_ex_atoms',&
+      CHARACTER(len=*), PARAMETER :: routineN = 'assign_mos_to_ex_atoms',&
                                      routineP = moduleN//':'//routineN
       
       INTEGER, DIMENSION(:,:), POINTER                   :: mos_of_ex_atoms
@@ -404,9 +413,9 @@ CONTAINS
       CALL get_qs_env(qs_env=qs_env, particle_set=particle_set, cell=cell)
       n_atoms = SIZE(particle_set)
 
-!     Temporarly impose periodic BCs in case of Berry's phase operator use for localization
-      perd_init(1:3) = cell%perd(1:3)
-      cell%perd(1:3) = 1
+!     Temporarly impose periodic BCs in case of Berry's phase operator used for localization
+      perd_init = cell%perd
+      cell%perd = 1
 
 !  Loop over n_search lowest energy MOs and all atoms 
       DO imo = 1,n_search
@@ -417,10 +426,7 @@ CONTAINS
 !        a large enough value to avoid surprises
          dist_min = 10000.0_dp
          DO iat = 1,n_atoms
-            at_pos(1:3) = particle_set(iat)%r(1:3)
-!           for test purposes
-            PRINT*, "at_index: ", iat
-            PRINT*, "particle_set(iat)%atom_index", particle_set(iat)%atom_index
+            at_pos = particle_set(iat)%r
             r_ac = pbc(at_pos, wfn_center, cell)
             dist = SQRT(r_ac(1)*r_ac(1) + r_ac(2)*r_ac(2) + r_ac(3)*r_ac(3))
          
@@ -441,11 +447,12 @@ CONTAINS
 !  Go back to initial BCs
       cell%perd = perd_init
 
-   END SUBROUTINE assign_loc_mos_to_ex_atoms
-
+   END SUBROUTINE assign_mos_to_ex_atoms
+   
 !> *************************************************************************************************
 !> \brief Assign a core MO to a given donor_state, taking the type (1S, 2S, etc) into account.
 !>        The projection on a representative Slater-type orbital is used as a indicator.
+!>        It is assumed that MOs are already assigned to excited atoms based on their center.
 !> \param donor_state the donor_state to which a MO must be assigned
 !> \param xas_tdp_env ...
 !> \param xas_tdp_control ...
@@ -467,22 +474,29 @@ CONTAINS
       TYPE(gto_basis_set_type), POINTER               :: sto_to_gto_basis_set, kind_basis_set
       INTEGER, DIMENSION(4,7)                         :: ne
       INTEGER                                         :: zval, i, l, nj, nsgf_sto, nsgf_kind, j,&
-                                                         n_search, imo, iat, nao, my_mo, at_index,&
-                                                         isgf
+                                                         n_search, imo, iat, nao, at_index, my_mo,&
+                                                         isgf, n_states, k
+      INTEGER, DIMENSION(:), POINTER                  :: my_mos
       REAL(dp)                                        :: zeff, max_overlap, overlap
       TYPE(qs_kind_type), DIMENSION(:), POINTER       :: qs_kind_set
       TYPE(mo_set_p_type), DIMENSION(:), POINTER      :: mos
-      TYPE(cp_fm_type), POINTER                       :: mo_coeff
+      TYPE(cp_fm_type), POINTER                       :: mo_coeff, col_coeff_j, work_vector
       INTEGER, DIMENSION(:,:), POINTER                :: mos_of_ex_atoms
-      REAL(dp), DIMENSION(:,:), POINTER               :: tmp_coeff, overlap_matrix
+      REAL(dp), DIMENSION(:,:), POINTER               :: tmp_coeff, overlap_matrix, work_array
       TYPE(particle_type), DIMENSION(:), POINTER      :: particle_set
       REAL(dp), DIMENSION(:), POINTER                 :: mo_evals
+      TYPE(dbcsr_p_type), DIMENSION(:), POINTER       :: matrix_ks
+      TYPE(cp_fm_struct_type), POINTER                :: col_vect_struct                               
+      TYPE(cp_para_env_type), POINTER                 :: para_env                                    
+      TYPE(cp_blacs_env_type), POINTER                :: blacs_env 
       
       NULLIFY(sto_basis_set, sto_to_gto_basis_set, qs_kind_set, kind_basis_set, lq, nq, zeta)
       NULLIFY(overlap_matrix, mos, mo_coeff, mos_of_ex_atoms, tmp_coeff, first_sgf, particle_set)
-      NULLIFY(mo_evals)
+      NULLIFY(mo_evals, matrix_ks, col_vect_struct, para_env, blacs_env, col_coeff_j, work_vector)
+      NULLIFY(work_array)
       
-      CALL get_qs_env(qs_env=qs_env, qs_kind_set=qs_kind_set, mos=mos, particle_set=particle_set)
+      CALL get_qs_env(qs_env=qs_env, qs_kind_set=qs_kind_set, mos=mos, particle_set=particle_set,&
+                      matrix_ks=matrix_ks, para_env=para_env, blacs_env=blacs_env)
 
 !  Contruction of a STO that fits the type of orbital we look for
       ALLOCATE(zeta(1))
@@ -492,12 +506,15 @@ CONTAINS
       IF (donor_state%state_type .EQ. xas_1s_type) THEN
          nq(1) = 1
          lq(1) = 0
+         n_states = 1
       ELSE IF (donor_state%state_type .EQ. xas_2s_type) THEN
          nq(1) = 2
          lq(1) = 0
+         n_states = 1
       ELSE
          CPABORT("Procedure for required type not implemented")
       END IF
+      ALLOCATE(my_mos(n_states))
 
 !     Getting the atomic number
       CALL get_qs_kind(qs_kind_set(donor_state%kind_index), zeff=zeff)
@@ -559,13 +576,15 @@ CONTAINS
                                   
 !           Computing the overlap
             overlap = 0.0_dp
-            DO i = 1,nsgf_kind
-               isgf = first_sgf(at_index)+i-1
-               DO j = 1,nsgf_sto
-                  overlap = overlap + overlap_matrix(j,i)*tmp_coeff(isgf,1)
+            DO i = 1,nsgf_sto
+               DO j = 1,nsgf_kind
+                  isgf = first_sgf(at_index)+j-1 
+                  overlap = overlap + overlap_matrix(i,j)*tmp_coeff(isgf,1)
                END DO
             END DO
-
+!           Take the absolute value, we do not care about the sign but we need to compare amplitudes
+            overlap = ABS(overlap)
+            PRINT*, "overlap: ", overlap
             IF (overlap .GT. max_overlap) THEN
                my_mo = imo
                max_overlap = overlap
@@ -573,28 +592,261 @@ CONTAINS
          END IF
       END DO
 
+!     For now, only case is n_states = 1 => s-type orbitals
+      my_mos(1) = my_mo
+
 !  Dealing with the result
-      IF ((my_mo .GT. 0) .AND. (my_mo .LE. n_search)) THEN
-!        Updating donor state        
-         CALL set_donor_state(donor_state=donor_state, mo_index=my_mo)
+      IF (ALL(my_mos .GT. 0) .AND. ALL(my_mos .LE. n_search)) THEN
+!        Assigning th MO indices to the donor_state
+         ALLOCATE(donor_state%mo_indices(n_states))
+         donor_state%mo_indices = my_mos
+
+!        Assigning corresponding energy eigenvalues
+         ALLOCATE(donor_state%energy_evals(n_states,n_states)) 
+         donor_state%energy_evals = 0.0_dp
          IF (.NOT. xas_tdp_env%qs_loc_env%do_localize) THEN
-!           Canonical MO, no change in eigenvalues
-            CALL set_donor_state(donor_state=donor_state, energy_eval=mo_evals(my_mo))
+!           Canonical MO, no change in eigenvalues, only diagonal elements
+            DO i = 1,n_states 
+               donor_state%energy_evals(i,i) = mo_evals(my_mos(i))
+            END DO
          ELSE IF (xas_tdp_env%qs_loc_env%do_localize) THEN
-!           MO have been rotated, need epsilon_ii
-!            CPABORT("Eigenvalues rotation not implemented yet")
-            PRINT*, "Eigenvalue rotation not done yet"
+            
+!           MO have been rotated, need epsilon_ij = <psi_i|F|psi_j> = sum_{pq} c_{qi}c_{pj} F_{pq}
+            CALL cp_fm_struct_create(col_vect_struct, nrow_global=nao, ncol_global=1,&
+                                     para_env=para_env, context=blacs_env)
+            CALL cp_fm_create(col_coeff_j, col_vect_struct)
+            CALL cp_fm_create(work_vector, col_vect_struct)
+            ALLOCATE(work_array(nao,1))
+
+            DO j = 1,n_states
+!              Retrieving mo_coeff for psi_j
+               CALL cp_fm_to_fm_submat(msource=mo_coeff, mtarget=col_coeff_j, nrow=nao, ncol=1,&
+                                      s_firstrow=1, s_firstcol=my_mos(j), t_firstrow=1,&
+                                      t_firstcol=1)
+
+!              Performing matrix product F|psi_j>
+               CALL cp_dbcsr_sm_fm_multiply(matrix_ks(1)%matrix, col_coeff_j, work_vector, ncol=1) 
+               CALL cp_fm_get_submatrix(work_vector, work_array)
+
+               DO i = 1,n_states
+!                 Retrieving mo_coeff for psi_i
+                  CALL cp_fm_get_submatrix(fm=mo_coeff, target_m=tmp_coeff, start_row=1,&
+                                           start_col=my_mos(i), n_rows=nao, n_cols=1,&
+                                           transpose=.FALSE.)
+
+!                 Do the final dot product
+                  DO k = 1,nao
+                     donor_state%energy_evals(i,j) = donor_state%energy_evals(i,j) + &
+                                                     tmp_coeff(k,1)*work_array(k,1)
+                  END DO
+               END DO
+            END DO
+
+            DEALLOCATE(work_array)
          END IF
       ELSE 
-         CPABORT("A core donor state could not be assigned a MO. Increasing NSEARCH might help.")
+         CPABORT("A core donor state could not be assigned MO(s). Increasing NSEARCH might help.")
       END IF
 
          
 !  Clean-up
       CALL deallocate_sto_basis_set(sto_basis_set)
       CALL deallocate_gto_basis_set(sto_to_gto_basis_set)
-      DEALLOCATE(nq, lq, zeta, overlap_matrix, tmp_coeff, first_sgf)
+      CALL cp_fm_struct_release(col_vect_struct)
+      CALL cp_fm_release(col_coeff_j)
+      CALL cp_fm_release(work_vector)
+      DEALLOCATE(nq, lq, zeta, overlap_matrix, tmp_coeff, first_sgf, my_mos)
 
    END SUBROUTINE assign_mo_to_donor_state
+
+!> *************************************************************************************************
+!> \brief Compute the centers and spreads of (core) MOs using the Berry phase operator
+!> \param centers the coordinates of the MO centers and spreads. First 3 elements of each coloum 
+!>        contain the MO centers x,y,z coordinates, last 2 contain the spread for 2 functionals
+!> \param xas_tdp_env ...
+!> \param xas_tdp_control ...
+!> \param qs_env ...
+!> \note xas_tdp_env%qs_loc_env is used and modified. OK since no localization done when this
+!>       subroutine is used
+!> *************************************************************************************************
+   SUBROUTINE find_mo_centers(xas_tdp_env, xas_tdp_control, qs_env)
+      
+      TYPE(xas_tdp_env_type), POINTER                 :: xas_tdp_env
+      TYPE(xas_tdp_control_type), POINTER             :: xas_tdp_control
+      TYPE(qs_environment_type), POINTER              :: qs_env
+
+      CHARACTER(len=*), PARAMETER :: routineN = 'find_mo_centers',&
+                                                      routineP = moduleN//':'//routineN
+
+      TYPE(qs_loc_env_new_type), POINTER              :: qs_loc_env
+      TYPE(localized_wfn_control_type), POINTER       :: loc_wfn_control
+      TYPE(cp_fm_p_type), DIMENSION(:, :), POINTER    :: zij_fm_set 
+      INTEGER                                         :: n_centers, nao, i, j, dim_op
+      TYPE(cell_type), POINTER                        :: cell 
+      REAL(dp), DIMENSION(6)                          :: weights 
+      TYPE(section_vals_type), POINTER                :: print_loc_section, prog_run_info
+      TYPE(dbcsr_p_type), DIMENSION(:, :), POINTER    :: op_sm_set 
+      TYPE(cp_fm_p_type), DIMENSION(:), POINTER       :: moloc_coeff
+      TYPE(cp_fm_type), POINTER                       :: vectors, opvec
+      TYPE(cp_fm_struct_type), POINTER                :: tmp_fm_struct  
+      TYPE(cp_para_env_type), POINTER                 :: para_env                                    
+      TYPE(cp_blacs_env_type), POINTER                :: blacs_env
+
+      NULLIFY(qs_loc_env, zij_fm_set, cell, print_loc_section, op_sm_set, moloc_coeff, vectors)
+      NULLIFY(opvec, loc_wfn_control, tmp_fm_struct, para_env, blacs_env, prog_run_info)
+      
+!  Initialization
+      qs_loc_env => xas_tdp_env%qs_loc_env
+      loc_wfn_control => qs_loc_env%localized_wfn_control
+      print_loc_section => xas_tdp_control%print_loc_subsection
+      n_centers = xas_tdp_control%n_search
+      CALL get_qs_env(qs_env=qs_env, para_env=para_env, blacs_env=blacs_env, cell=cell)
+
+!  Set print option to debug to keep clean output file
+      prog_run_info => section_vals_get_subs_vals(print_loc_Section, "PROGRAM_RUN_INFO")
+      CALL section_vals_val_set(prog_run_info, keyword_name="_SECTION_PARAMETERS_",&
+                           i_val=debug_print_level)
+
+!  Assume qs_loc_env not initialized yet. Impose values we need
+      loc_wfn_control%localization_method = do_loc_none
+      loc_wfn_control%operator_type = 0 !op_loc_berry 
+      loc_wfn_control%nloc_states(:) = n_centers
+      loc_wfn_control%eps_occ = 0.0_dp
+      loc_wfn_control%lu_bound_states(1,:) = 1
+      loc_wfn_control%lu_bound_states(2,:) = n_centers
+      loc_wfn_control%set_of_states = 2 !state_loc_list
+      loc_wfn_control%do_homo = .FALSE.
+      ALLOCATE(loc_wfn_control%loc_states(n_centers,2))
+      DO i = 1,n_centers
+         loc_wfn_control%loc_states(i,:) = i
+      END DO
+      CALL set_loc_centers(loc_wfn_control, loc_wfn_control%nloc_states, nspins=1)
+      CALL qs_loc_env_init(qs_loc_env, loc_wfn_control, qs_env, myspin=1, do_localize=.TRUE.)
+
+
+      CALL get_qs_loc_env(qs_loc_env=qs_loc_env, weights=weights, op_sm_set=op_sm_set,&
+                          moloc_coeff=moloc_coeff)
+
+!  Prepare for zij
+      vectors => moloc_coeff(1)%matrix
+      CALL cp_fm_get_info(vectors, nrow_global=nao)
+      CALL cp_fm_create(opvec, vectors%matrix_struct)      
+      
+      CALL cp_fm_struct_create(tmp_fm_struct, para_env=para_env, context=blacs_env,&
+                               ncol_global=n_centers, nrow_global=n_centers)
+
+      IF (cell%orthorhombic) THEN
+         dim_op = 3
+      ELSE
+         dim_op = 6
+      END IF
+      ALLOCATE(zij_fm_set(2,dim_op))
+                       
+!  zij computation, copied from qs_loc_methods:optimize_loc_berry
+      DO i = 1,dim_op
+         DO j = 1,2 
+            CALL cp_fm_create(zij_fm_set(j, i)%matrix, tmp_fm_struct)
+            CALL cp_fm_set_all(zij_fm_set(j, i)%matrix, 0.0_dp)
+            CALL cp_dbcsr_sm_fm_multiply(op_sm_set(j, i)%matrix, vectors, opvec, ncol=n_centers) 
+            CALL cp_gemm("T", "N", n_centers, n_centers, nao, 1.0_dp, vectors, opvec, 0.0_dp, & 
+                         zij_fm_set(j, i)%matrix)
+         END DO
+      END DO
+
+!  Compute centers (and spread)
+      CALL centers_spreads_berry(qs_loc_env=qs_loc_env, zij=zij_fm_set, nmoloc=n_centers,&
+                                 cell=cell, weights=weights, ispin=1 ,&
+                                 print_loc_section=print_loc_section, only_initial_out=.TRUE.)  
+
+!  Clean-up
+      CALL cp_fm_release(opvec)
+      CALL cp_fm_struct_release(tmp_fm_struct)
+      DO i = 1,dim_op
+         DO j = 1,2
+            CALL cp_fm_release(zij_fm_set(j, i)%matrix)
+         END DO
+      END DO
+      DEALLOCATE(zij_fm_set)
+      qs_loc_env%do_localize = .FALSE.
+
+
+   END SUBROUTINE find_mo_centers
+
+!> *************************************************************************************************
+!> \brief Writes the core MOs to excited atoms associations in the main output file
+!> \param xas_tdp_env ...
+!> \param output_unit ...
+!> *************************************************************************************************
+   SUBROUTINE write_mos_to_ex_atoms_association(xas_tdp_env, qs_env, output_unit) 
+
+      TYPE(xas_tdp_env_type), POINTER                 :: xas_tdp_env 
+      TYPE(qs_environment_type), POINTER              :: qs_env
+      INTEGER, INTENT(IN)                             :: output_unit
+
+      CHARACTER(LEN=*), PARAMETER :: routineN = 'write_mos_to_ex_atoms_association', &
+                                          routineP = moduleN//':'//routineN
+
+      REAL(dp), DIMENSION(3)                          :: wfn_center, at_pos, r_ac
+      INTEGER, DIMENSION(3)                           :: perd_init
+      TYPE(cell_type), POINTER                        :: cell
+      TYPE(particle_type), DIMENSION(:), POINTER      :: particle_set
+      INTEGER, DIMENSION(:,:), POINTER                :: mos_of_ex_atoms
+      INTEGER, DIMENSION(:), POINTER                  :: ex_atom_indices
+      REAL(dp)                                        :: dist, mo_spread
+      INTEGER                                         :: imo, nmo, at_index, tmp_index
+      CHARACTER(LEN=2)                                :: at_symbol
+
+      NULLIFY(cell, particle_set, mos_of_ex_atoms, ex_atom_indices)
+
+      IF (output_unit .LE. 0 ) RETURN
+
+      WRITE(UNIT=output_unit, FMT="(/,T3,A,/,T3,A,/,T3,A)") &
+         "              Associated    Associated        Distance to     MO spread (Ang)",&
+         "MO index      atom index     atom kind    MO center (Ang)   -w_i ln(|z_ij|^2)",&
+         "-----------------------------------------------------------------------------"
+
+!  Initialization
+      mos_of_ex_atoms => xas_tdp_env%mos_of_ex_atoms
+      ex_atom_indices => xas_tdp_env%ex_atom_indices
+      nmo = SIZE(mos_of_ex_atoms,1)
+      CALL get_qs_env(qs_env=qs_env, particle_set=particle_set, cell=cell)
+      
+!     because the use of Berry's phase operator implies PBCs
+      perd_init = cell%perd
+      cell%perd = 1
+      
+!  Retrieving all the info for each MO
+      DO imo = 1,nmo
+
+!        each Mo is associated to at most one atom (only 1 in array of -1)
+         IF (ANY(mos_of_ex_atoms(imo,:) .EQ. 1)) THEN
+            tmp_index = MAXLOC(mos_of_ex_atoms(imo,:),1) 
+            at_index = ex_atom_indices(tmp_index)
+            at_symbol = particle_set(at_index)%atomic_kind%element_symbol
+
+            at_pos = particle_set(at_index)%r
+            wfn_center = xas_tdp_env%qs_loc_env%localized_wfn_control%centers_set(1)%array(1:3,imo)
+            r_ac = pbc(at_pos, wfn_center, cell)
+            dist = SQRT(r_ac(1)*r_ac(1) + r_ac(2)*r_ac(2) + r_ac(3)*r_ac(3))
+!           convert distance from a.u. to Angstrom
+            dist = dist*angstrom         
+         
+            mo_spread = xas_tdp_env%qs_loc_env%localized_wfn_control%centers_set(1)%array(4,imo)
+            mo_spread = mo_spread*angstrom
+         
+            WRITE(UNIT=output_unit, FMT="(T3,I8,I16,A14,ES19.3,ES20.3)") &
+               imo, at_index, at_symbol, dist, mo_spread
+
+         END IF
+         
+      END DO
+
+      WRITE(UNIT=output_unit, FMT="(T3,A,/)") &
+         "-----------------------------------------------------------------------------"
+
+!  Go back to initial BCs
+      cell%perd = perd_init
+
+   END SUBROUTINE write_mos_to_ex_atoms_association
 
 END MODULE xas_tdp_methods

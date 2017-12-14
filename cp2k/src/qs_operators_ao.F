@@ -1054,7 +1054,7 @@ CONTAINS
 !>               calculated in terms of the contracted basis functions
 !> \param qs_env enviroment for the lists and the basis sets
 !> \param rc reference vector position
-!> \param order maximum order of the momentum, for the doipole order = 1
+!> \param order maximum order of the momentum, for the dipole order = 1
 !> \param minimum_image take into account only the first neighbors in the lists
 !> \param soft ...
 !> \par History
