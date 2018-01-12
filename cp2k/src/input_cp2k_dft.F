@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations                              !
-!   Copyright (C) 2000 - 2017  CP2K developers group                                               !
+!   Copyright (C) 2000 - 2018  CP2K developers group                                               !
 !--------------------------------------------------------------------------------------------------!
 
 ! **************************************************************************************************
@@ -90,7 +90,7 @@ MODULE input_cp2k_dft
         wfi_use_guess_method_nr, wfi_use_prev_p_method_nr, wfi_use_prev_rho_r_method_nr, &
         wfi_use_prev_wf_method_nr, xas_1s_type, xas_2p_type, xas_2s_type, xas_dip_len, &
         xas_dip_vel, xas_dscf, xas_none, xas_tp_fh, xas_tp_flex, xas_tp_hh, xas_tp_xfh, &
-        xas_tp_xhh, xes_tp_val, xas_tdp_by_index, xas_tdp_by_kind, xas_not_excited
+        xas_tp_xhh, xes_tp_val, xas_not_excited, xas_tdp_by_kind, xas_tdp_by_index
    USE input_cp2k_almo,                 ONLY: create_almo_scf_section
    USE input_cp2k_distribution,         ONLY: create_distribution_section
    USE input_cp2k_field,                ONLY: create_efield_section,&
@@ -281,6 +281,14 @@ CONTAINS
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
+      CALL keyword_create(keyword, name="AUTO_BASIS", &
+                          description="Specify size of automatically generated auxiliary basis sets: "// &
+                          "Options={small,medium,large,huge}", &
+                          usage="AUTO_BASIS {basis_type} {basis_size}", &
+                          type_of_var=char_t, repeats=.TRUE., n_var=-1, default_c_vals=(/"X", "X"/))
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
       CALL keyword_create(keyword=keyword, &
                           name="SURFACE_DIPOLE_CORRECTION", &
                           variants=s2a("SURFACE_DIPOLE", &
@@ -307,6 +315,7 @@ CONTAINS
                           usage="SURF_DIP_DIR Z")
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
+
       NULLIFY (subsection)
       CALL create_scf_section(subsection)
       CALL section_add_subsection(section, subsection)
@@ -404,7 +413,7 @@ CONTAINS
       CALL create_xas_tdp_section(subsection)
       CALL section_add_subsection(section, subsection)
       CALL section_release(subsection)
-      
+
       CALL create_localize_section(subsection)
       CALL section_add_subsection(section, subsection)
       CALL section_release(subsection)
@@ -895,6 +904,12 @@ CONTAINS
       CALL cp_print_key_section_create(print_key, "PROGRAM_BANNER", &
                                        description="Controls the printing of the banner of the MM program", &
                                        print_level=silent_print_level, filename="__STD_OUT__")
+      CALL section_add_subsection(section, print_key)
+      CALL section_release(print_key)
+
+      CALL cp_print_key_section_create(print_key, "BASIS_SET_FILE", &
+                                       description="Controls the printing of a file with all basis sets used.", &
+                                       print_level=high_print_level, filename="LOCAL_BASIS_SETS")
       CALL section_add_subsection(section, print_key)
       CALL section_release(print_key)
 
@@ -7498,7 +7513,7 @@ CONTAINS
       CALL keyword_create(keyword, name="DIPOLE_FORM", &
                           variants=(/"DIP_FORM"/), &
                           description="Type of integral to get the oscillator strengths "// &
-                          "in the dipole approximation", &
+                          "in the diipole approximation", &
                           usage="DIPOLE_FORM string", &
                           default_i_val=xas_dip_vel, &
                           enum_c_vals=s2a("LENGTH", "VELOCITY"), &
@@ -7518,7 +7533,7 @@ CONTAINS
 
       CALL keyword_create(keyword, name="STATE_TYPE", &
                           variants=(/"TYPE"/), &
-                          description="Type of the orbitals that are excited for the xas spectra calculation", &
+                          description="Type of the orbitas that are excited for the xas spectra calculation", &
                           usage="STATE_TYPE 1S", &
                           default_i_val=xas_1s_type, &
                           enum_c_vals=s2a("1S", "2S", "2P"), &
@@ -7822,6 +7837,7 @@ CONTAINS
       CALL section_release(subsection)
 
    END SUBROUTINE create_xas_tdp_section  
+ 
 
 ! **************************************************************************************************
 !> \brief      Create CP2K input section for the smearing of occupation numbers

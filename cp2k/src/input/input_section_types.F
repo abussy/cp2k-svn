@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations                              !
-!   Copyright (C) 2000 - 2017  CP2K developers group                                               !
+!   Copyright (C) 2000 - 2018  CP2K developers group                                               !
 !--------------------------------------------------------------------------------------------------!
 
 ! **************************************************************************************************
@@ -37,6 +37,7 @@ MODULE input_section_types
    USE kinds,                           ONLY: default_path_length,&
                                               default_string_length,&
                                               dp
+   USE print_messages,                  ONLY: print_message
    USE reference_manager,               ONLY: get_citation_key,&
                                               print_format_journal,&
                                               print_reference
@@ -45,7 +46,6 @@ MODULE input_section_types
                                               substitute_special_xml_tokens,&
                                               typo_match,&
                                               uppercase
-   USE termination,                     ONLY: print_message
 #include "../base/base_uses.f90"
 
    IMPLICIT NONE
@@ -77,7 +77,7 @@ MODULE input_section_types
    PUBLIC :: section_typo_match, typo_match_section, typo_matching_rank, typo_matching_line
 
 ! **************************************************************************************************
-!> \brief represent a pointer to a section (to make arrays of poection_get_keywordnters)
+!> \brief represent a pointer to a section (to make arrays of pointers)
 !> \param section the pointer to the section
 !> \author fawzi
 ! **************************************************************************************************

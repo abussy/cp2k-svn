@@ -1,6 +1,6 @@
 !--------------------------------------------------------------------------------------------------!
 !   CP2K: A general program to perform molecular dynamics simulations                              !
-!   Copyright (C) 2000 - 2017  CP2K developers group                                               !
+!   Copyright (C) 2000 - 2018  CP2K developers group                                               !
 !--------------------------------------------------------------------------------------------------!
 
 ! **************************************************************************************************
@@ -82,7 +82,7 @@ MODULE message_passing
    INTEGER, PARAMETER, PUBLIC :: mp_status_size = MPI_STATUS_SIZE
    INTEGER, PARAMETER, PUBLIC :: mp_proc_null = MPI_PROC_NULL
    ! Set max allocatable memory by MPI to 2 GiByte
-   INTEGER(KIND=MPI_ADDRESS_KIND), PARAMETER, PRIVATE :: mp_max_memory_size = 2*INT(2, KIND=MPI_ADDRESS_KIND)**30
+   INTEGER(KIND=MPI_ADDRESS_KIND), PARAMETER, PRIVATE :: mp_max_memory_size = HUGE(INT(1,KIND=int_4))
 
 #if __MPI_VERSION > 2
    INTEGER, PARAMETER, PUBLIC :: mp_max_library_version_string = MPI_MAX_LIBRARY_VERSION_STRING
@@ -679,14 +679,14 @@ MODULE message_passing
 
 ! **************************************************************************************************
    TYPE mp_perf_env_p_type
-      TYPE(mp_perf_env_type), POINTER         :: mp_perf_env
+      TYPE(mp_perf_env_type), POINTER         :: mp_perf_env => Null()
    END TYPE mp_perf_env_p_type
 
    ! introduce a stack of mp_perfs, first index is the stack pointer, for convience is replacing
    INTEGER, PARAMETER :: max_stack_size = 10
    INTEGER            :: stack_pointer = 0
    ! target attribute needed as a hack around ifc 7.1 bug
-   TYPE(mp_perf_env_p_type), DIMENSION(max_stack_size), TARGET :: mp_perf_stack
+   TYPE(mp_perf_env_p_type), DIMENSION(max_stack_size), TARGET, SAVE :: mp_perf_stack
 
    CHARACTER(LEN=20), PARAMETER :: sname(MAX_PERF) = &
                                    (/"MP_Group            ", "MP_Bcast            ", "MP_Allreduce        ", &
@@ -1036,6 +1036,8 @@ CONTAINS
 
 #if defined(__parallel)
       TYPE(mp_perf_type), POINTER              :: mp_perf
+
+      IF (.NOT. ASSOCIATED(mp_perf_stack(stack_pointer)%mp_perf_env)) return
 
       mp_perf => mp_perf_stack(stack_pointer)%mp_perf_env%mp_perfs(perf_id)
       IF (PRESENT(count)) THEN
