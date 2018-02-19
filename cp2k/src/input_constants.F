@@ -48,7 +48,8 @@ MODULE input_constants
                                                do_qmmm = 3, &
                                                do_qmmmx = 4, &
                                                do_eip = 5, &
-                                               do_mixed = 6
+                                               do_mixed = 6, &
+                                               do_embed = 7
 
    ! QMMM
    REAL(KIND=dp), PARAMETER, PUBLIC         :: RADIUS_QMMM_DEFAULT = 0.80_dp, & ! Angstrom
@@ -974,6 +975,7 @@ MODULE input_constants
                                                kg_color_greedy = 1
    ! kg kinetic energy embedding potential
    INTEGER, PARAMETER, PUBLIC               :: kg_tnadd_embed = 100, &
+                                               kg_tnadd_embed_ri = 101, &
                                                kg_tnadd_atomic = 200, &
                                                kg_tnadd_none = 300
 
