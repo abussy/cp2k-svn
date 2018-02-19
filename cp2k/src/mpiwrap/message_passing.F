@@ -91,6 +91,7 @@ MODULE message_passing
 #endif
 
    INTEGER, PARAMETER, PUBLIC :: file_offset = MPI_OFFSET_KIND
+   INTEGER, PARAMETER, PUBLIC :: address_kind = MPI_ADDRESS_KIND
    INTEGER, PARAMETER, PUBLIC :: file_amode_create = MPI_MODE_CREATE
    INTEGER, PARAMETER, PUBLIC :: file_amode_rdonly = MPI_MODE_RDONLY
    INTEGER, PARAMETER, PUBLIC :: file_amode_wronly = MPI_MODE_WRONLY
@@ -111,6 +112,7 @@ MODULE message_passing
    INTEGER, PARAMETER, PUBLIC :: mp_max_library_version_string = 1
 
    INTEGER, PARAMETER, PUBLIC :: file_offset = int_8
+   INTEGER, PARAMETER, PUBLIC :: address_kind = int_8
    INTEGER, PARAMETER, PUBLIC :: file_amode_create = 1
    INTEGER, PARAMETER, PUBLIC :: file_amode_rdonly = 2
    INTEGER, PARAMETER, PUBLIC :: file_amode_wronly = 4
@@ -149,7 +151,7 @@ MODULE message_passing
    PUBLIC :: mp_probe
 
    ! message passing
-   PUBLIC :: mp_bcast, mp_sum, mp_sum_partial, mp_max, mp_maxloc, mp_minloc, mp_min, mp_sync
+   PUBLIC :: mp_bcast, mp_sum, mp_sum_partial, mp_max, mp_maxloc, mp_minloc, mp_min, mp_prod, mp_sync
    PUBLIC :: mp_isync, mp_isum
    PUBLIC :: mp_gather, mp_alltoall, mp_sendrecv, mp_allgather, mp_iallgather
    PUBLIC :: mp_isend, mp_irecv, mp_ibcast
@@ -325,6 +327,10 @@ MODULE message_passing
          mp_min_d, mp_min_dv, &
          mp_min_c, mp_min_cv, &
          mp_min_z, mp_min_zv
+   END INTERFACE
+
+   INTERFACE mp_prod
+      MODULE PROCEDURE mp_prod_r, mp_prod_d, mp_prod_c, mp_prod_z
    END INTERFACE
 
    INTERFACE mp_gather
@@ -649,7 +655,7 @@ MODULE message_passing
 
    TYPE mp_file_indexing_meta_type
       INTEGER, DIMENSION(:), POINTER   :: index
-      INTEGER(kind=file_offset), &
+      INTEGER(kind=address_kind), &
          DIMENSION(:), POINTER         :: chunks
    END TYPE mp_file_indexing_meta_type
 
@@ -3647,7 +3653,7 @@ CONTAINS
       INTEGER, INTENT(IN)                       :: count
       INTEGER, DIMENSION(1:count), &
          INTENT(IN), TARGET                     :: lengths
-      INTEGER(kind=file_offset), &
+      INTEGER(kind=address_kind), &
          DIMENSION(1:count), INTENT(in), TARGET :: displs
       TYPE(mp_file_descriptor_type)             :: type_descriptor
 

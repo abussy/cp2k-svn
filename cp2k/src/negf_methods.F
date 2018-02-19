@@ -12,13 +12,15 @@ MODULE negf_methods
                                               Papior2017,&
                                               cite_reference
    USE cp_blacs_env,                    ONLY: cp_blacs_env_type
-   USE cp_cfm_basic_linalg,             ONLY: cp_cfm_add,&
-                                              cp_cfm_gemm,&
+   USE cp_cfm_basic_linalg,             ONLY: cp_cfm_gemm,&
                                               cp_cfm_scale,&
+                                              cp_cfm_scale_and_add,&
                                               cp_cfm_trace
    USE cp_cfm_types,                    ONLY: &
-        cp_cfm_copy_general, cp_cfm_create, cp_cfm_get_info, cp_cfm_get_submatrix, cp_cfm_p_type, &
-        cp_cfm_release, cp_cfm_retain, cp_cfm_set_submatrix, cp_cfm_to_fm
+        copy_cfm_info_type, cp_cfm_cleanup_copy_general, cp_cfm_create, &
+        cp_cfm_finish_copy_general, cp_cfm_get_info, cp_cfm_get_submatrix, cp_cfm_p_type, &
+        cp_cfm_release, cp_cfm_retain, cp_cfm_set_submatrix, cp_cfm_start_copy_general, &
+        cp_cfm_to_fm
    USE cp_control_types,                ONLY: dft_control_type
    USE cp_fm_basic_linalg,              ONLY: cp_fm_scale,&
                                               cp_fm_scale_and_add,&
@@ -176,8 +178,9 @@ CONTAINS
       CALL cite_reference(Bailey2006)
       CALL cite_reference(Papior2017)
 
-      NULLIFY (blacs_env, global_env, qs_env, root_section, cp_subsys)
-      CALL force_env_get(force_env, globenv=global_env, qs_env=qs_env, root_section=root_section, subsys=cp_subsys)
+      NULLIFY (blacs_env, cp_subsys, global_env, qs_env, root_section, sub_force_env)
+      CALL force_env_get(force_env, globenv=global_env, qs_env=qs_env, root_section=root_section, &
+                         sub_force_env=sub_force_env, subsys=cp_subsys)
 
       CALL get_qs_env(qs_env, blacs_env=blacs_env)
 
@@ -192,13 +195,11 @@ CONTAINS
       CALL negf_sub_env_create(sub_env, negf_control, blacs_env, global_env%blacs_grid_layout, global_env%blacs_repeatable)
       CALL negf_env_create(negf_env, sub_env, negf_control, force_env, negf_mixing_section, log_unit)
 
-      CALL force_env_get(force_env, sub_force_env=sub_force_env)
-
       ! compute contact Fermi level as well as requested properties
       ncontacts = SIZE(negf_control%contacts)
       DO icontact = 1, ncontacts
          NULLIFY (qs_env)
-         CALL force_env_get(sub_force_env(1)%force_env, qs_env=qs_env)
+         CALL force_env_get(sub_force_env(icontact)%force_env, qs_env=qs_env)
          CALL guess_fermi_level(icontact, negf_env, negf_control, sub_env, qs_env, log_unit)
 
          print_section => section_vals_get_subs_vals(negf_contact_section, "PRINT", i_rep_section=icontact)
@@ -309,8 +310,8 @@ CONTAINS
 
       CHARACTER(len=default_string_length)               :: temperature_str
       COMPLEX(kind=dp)                                   :: lbound_cpath, lbound_lpath, ubound_lpath
-      INTEGER                                            :: direction_axis, handle, image, ispin, &
-                                                            nao, nimages, nspins, step
+      INTEGER                                            :: direction_axis_abs, handle, image, &
+                                                            ispin, nao, nimages, nspins, step
       INTEGER, ALLOCATABLE, DIMENSION(:, :)              :: index_to_cell
       INTEGER, DIMENSION(:, :, :), POINTER               :: cell_to_index
       LOGICAL                                            :: do_kpoints
@@ -344,7 +345,7 @@ CONTAINS
 
          nimages = dft_control%nimages
          nspins = dft_control%nspins
-         direction_axis = negf_env%contacts(contact_id)%direction_axis
+         direction_axis_abs = ABS(negf_env%contacts(contact_id)%direction_axis)
 
          CPASSERT(SIZE(negf_env%contacts(contact_id)%h_00) == nspins)
 
@@ -394,12 +395,12 @@ CONTAINS
          nelectrons_qs_cell0 = 0.0_dp
          nelectrons_qs_cell1 = 0.0_dp
          DO image = 1, nimages
-            IF (index_to_cell(direction_axis, image) == 0) THEN
+            IF (index_to_cell(direction_axis_abs, image) == 0) THEN
                DO ispin = 1, nspins
                   CALL dbcsr_trace(rho_ao_qs_kp(ispin, image)%matrix, matrix_s_kp(1, image)%matrix, trace)
                   nelectrons_qs_cell0 = nelectrons_qs_cell0+trace
                END DO
-            ELSE IF (ABS(index_to_cell(direction_axis, image)) == 1) THEN
+            ELSE IF (ABS(index_to_cell(direction_axis_abs, image)) == 1) THEN
                DO ispin = 1, nspins
                   CALL dbcsr_trace(rho_ao_qs_kp(ispin, image)%matrix, matrix_s_kp(1, image)%matrix, trace)
                   nelectrons_qs_cell1 = nelectrons_qs_cell1+trace
@@ -654,7 +655,7 @@ CONTAINS
 
          CALL cp_fm_copy_general(work_fm, matrix_s_fm, para_env)
       ELSE
-         matrix_s_fm => negf_env%contacts(base_contact)%s_00
+         matrix_s_fm => negf_env%s_s
          CALL cp_fm_retain(matrix_s_fm)
          CALL cp_fm_get_info(matrix_s_fm, matrix_struct=fm_struct)
       END IF
@@ -775,8 +776,8 @@ CONTAINS
                                               sub_env=sub_env, &
                                               ispin=ispin, &
                                               base_contact=base_contact, &
-                                              integr_lbound=lbound_cpath, &
-                                              integr_ubound=ubound_cpath, &
+                                              integr_lbound=ubound_cpath, &
+                                              integr_ubound=ubound_lpath, &
                                               matrix_s_global=matrix_s_fm, &
                                               is_circular=.FALSE., &
                                               g_surf_cache=g_surf_linear(ispin))
@@ -1012,7 +1013,7 @@ CONTAINS
 !> \param g_ret_scale        scale factor for retarded Green's functions
 !> \param gamma_contacts     2-D array of globally distributed matrices to store broadening matrices
 !>                           for every contact ([n_contacts, npoints])
-!> \param gret_gamma_gadv    2-D array of globally distributed matrices to store the quantity:
+!> \param gret_gamma_gadv    2-D array of globally distributed matrices to store the spectral function:
 !>                           g_ret_s * gamma * g_ret_s^C for every contact ([n_contacts, n_points])
 !> \param dos                density of states at 'omega' ([n_points])
 !> \param transm_coeff       transmission coefficients between two contacts 'transm_contact1'
@@ -1053,6 +1054,10 @@ CONTAINS
 
       INTEGER                                            :: handle, icontact, igroup, ipoint, &
                                                             ncontacts, npoints, nrows
+      TYPE(copy_cfm_info_type), ALLOCATABLE, &
+         DIMENSION(:)                                    :: info1
+      TYPE(copy_cfm_info_type), ALLOCATABLE, &
+         DIMENSION(:, :)                                 :: info2
       TYPE(cp_cfm_p_type), ALLOCATABLE, DIMENSION(:)     :: g_ret_s_group, self_energy_contacts, &
                                                             zwork1_contacts, zwork2_contacts
       TYPE(cp_cfm_p_type), ALLOCATABLE, DIMENSION(:, :)  :: gamma_contacts_group, &
@@ -1174,8 +1179,9 @@ CONTAINS
       DO ipoint = 1, npoints
          IF (ASSOCIATED(g_surf_contacts(1, ipoint)%matrix)) THEN
             IF (sub_env%ngroups > 1 .OR. .NOT. PRESENT(g_ret_s)) THEN
-               ! create a group-specific matrix to store the computed Green's function if there are at least two parallel groups;
-               ! otherwise pointers to group-specific matrices have already been initialised and they point to globally distributed matrices
+               ! create a group-specific matrix to store retarded Green's function if there are
+               ! at least two parallel groups; otherwise pointers to group-specific matrices have
+               ! already been initialised and they point to globally distributed matrices
                IF (ALLOCATED(g_ret_s_group)) THEN
                   CALL cp_cfm_create(g_ret_s_group(ipoint)%matrix, fm_struct)
                END IF
@@ -1202,8 +1208,7 @@ CONTAINS
                ! self energy of the "left" (1) and "right" contacts
                DO icontact = 1, ncontacts
                   CALL negf_contact_self_energy(self_energy_c=self_energy_contacts(icontact)%matrix, &
-                                                !omega=omega(ipoint), &
-                                                omega=omega(ipoint)-negf_control%contacts(just_contact)%v_external, &
+                                                omega=omega(ipoint), &
                                                 g_surf_c=g_surf_contacts(icontact, ipoint)%matrix, &
                                                 h_sc0=negf_env%contacts(just_contact)%h_01(ispin)%matrix, &
                                                 s_sc0=negf_env%contacts(just_contact)%s_01, &
@@ -1215,7 +1220,6 @@ CONTAINS
                ! contact self energies
                DO icontact = 1, ncontacts
                   CALL negf_contact_self_energy(self_energy_c=self_energy_contacts(icontact)%matrix, &
-                                                !omega=omega(ipoint), & ! INCORRECT
                                                 omega=omega(ipoint)-negf_control%contacts(icontact)%v_external, &
                                                 g_surf_c=g_surf_contacts(icontact, ipoint)%matrix, &
                                                 h_sc0=negf_env%h_sc(ispin, icontact)%matrix, &
@@ -1237,7 +1241,7 @@ CONTAINS
             IF (ALLOCATED(g_ret_s_group)) THEN
                ! sum up self energies for all contacts
                DO icontact = 2, ncontacts
-                  CALL cp_cfm_add(z_one, self_energy_contacts(1)%matrix, z_one, self_energy_contacts(icontact)%matrix)
+                  CALL cp_cfm_scale_and_add(z_one, self_energy_contacts(1)%matrix, z_one, self_energy_contacts(icontact)%matrix)
                END DO
 
                ! retarded Green's function for the scattering region
@@ -1291,10 +1295,25 @@ CONTAINS
             END DO
 
             IF (ASSOCIATED(para_env)) THEN
+               ALLOCATE (info1(npoints))
+
                DO ipoint = 1, npoints
-                  IF (ASSOCIATED(g_ret_s(ipoint)%matrix)) &
-                     CALL cp_cfm_copy_general(g_ret_s_group(ipoint)%matrix, g_ret_s(ipoint)%matrix, para_env)
+                  IF (ASSOCIATED(g_ret_s(ipoint)%matrix)) THEN
+                     CALL cp_cfm_start_copy_general(g_ret_s_group(ipoint)%matrix, &
+                                                    g_ret_s(ipoint)%matrix, &
+                                                    para_env, info1(ipoint))
+                  END IF
                END DO
+
+               DO ipoint = 1, npoints
+                  IF (ASSOCIATED(g_ret_s(ipoint)%matrix)) THEN
+                     CALL cp_cfm_finish_copy_general(g_ret_s(ipoint)%matrix, info1(ipoint))
+                     IF (ASSOCIATED(g_ret_s_group(ipoint)%matrix)) &
+                        CALL cp_cfm_cleanup_copy_general(g_ret_s_group(ipoint)%matrix, info1(ipoint))
+                  END IF
+               END DO
+
+               DEALLOCATE (info1)
             END IF
          END IF
       END IF
@@ -1312,14 +1331,31 @@ CONTAINS
             END DO pnt1
 
             IF (ASSOCIATED(para_env)) THEN
+               ALLOCATE (info2(ncontacts, npoints))
+
                DO ipoint = 1, npoints
                   DO icontact = 1, ncontacts
                      IF (ASSOCIATED(gamma_contacts(icontact, ipoint)%matrix)) THEN
-                        CALL cp_cfm_copy_general(gamma_contacts_group(icontact, ipoint)%matrix, &
-                                                 gamma_contacts(icontact, ipoint)%matrix, para_env)
+                        CALL cp_cfm_start_copy_general(gamma_contacts_group(icontact, ipoint)%matrix, &
+                                                       gamma_contacts(icontact, ipoint)%matrix, &
+                                                       para_env, info2(icontact, ipoint))
                      END IF
                   END DO
                END DO
+
+               DO ipoint = 1, npoints
+                  DO icontact = 1, ncontacts
+                     IF (ASSOCIATED(gamma_contacts(icontact, ipoint)%matrix)) THEN
+                        CALL cp_cfm_finish_copy_general(gamma_contacts(icontact, ipoint)%matrix, info2(icontact, ipoint))
+                        IF (ASSOCIATED(gamma_contacts_group(icontact, ipoint)%matrix)) THEN
+                           CALL cp_cfm_cleanup_copy_general(gamma_contacts_group(icontact, ipoint)%matrix, &
+                                                            info2(icontact, ipoint))
+                        END IF
+                     END IF
+                  END DO
+               END DO
+
+               DEALLOCATE (info2)
             END IF
          END IF
       END IF
@@ -1338,14 +1374,31 @@ CONTAINS
             END DO pnt2
 
             IF (ASSOCIATED(para_env)) THEN
+               ALLOCATE (info2(ncontacts, npoints))
+
                DO ipoint = 1, npoints
                   DO icontact = 1, ncontacts
                      IF (ASSOCIATED(gret_gamma_gadv(icontact, ipoint)%matrix)) THEN
-                        CALL cp_cfm_copy_general(gret_gamma_gadv_group(icontact, ipoint)%matrix, &
-                                                 gret_gamma_gadv(icontact, ipoint)%matrix, para_env)
+                        CALL cp_cfm_start_copy_general(gret_gamma_gadv_group(icontact, ipoint)%matrix, &
+                                                       gret_gamma_gadv(icontact, ipoint)%matrix, &
+                                                       para_env, info2(icontact, ipoint))
                      END IF
                   END DO
                END DO
+
+               DO ipoint = 1, npoints
+                  DO icontact = 1, ncontacts
+                     IF (ASSOCIATED(gret_gamma_gadv(icontact, ipoint)%matrix)) THEN
+                        CALL cp_cfm_finish_copy_general(gret_gamma_gadv(icontact, ipoint)%matrix, info2(icontact, ipoint))
+                        IF (ASSOCIATED(gret_gamma_gadv_group(icontact, ipoint)%matrix)) THEN
+                           CALL cp_cfm_cleanup_copy_general(gret_gamma_gadv_group(icontact, ipoint)%matrix, &
+                                                            info2(icontact, ipoint))
+                        END IF
+                     END IF
+                  END DO
+               END DO
+
+               DEALLOCATE (info2)
             END IF
          END IF
       END IF
@@ -1544,7 +1597,7 @@ CONTAINS
          IF (PRESENT(just_contact)) THEN
             ! do not apply the external potential when computing the Fermi level of a bulk contact.
             ! We are using a ficticious electronic device, which identical to the bulk contact in question;
-            ! icontact == 1 correspond to the "left" contact, so the matrices h_01 and s_01 needs to be transposed
+            ! icontact == 1 corresponds to the "left" contact, so the matrices h_01 and s_01 needs to be transposed,
             ! while icontact == 2 correspond to the "right" contact and we should use the matrices h_01 and s_01 as is.
             DO icontact = 1, ncontacts
                CALL negf_surface_green_function_batch(g_surf=g_surf_cache%g_surf_contacts(icontact, :), &
@@ -1582,7 +1635,7 @@ CONTAINS
          CALL green_functions_cache_release(g_surf_cache)
 
          DO ipole = 2, npoles
-            CALL cp_cfm_add(z_one, g_ret_s(1)%matrix, z_one, g_ret_s(ipole)%matrix)
+            CALL cp_cfm_scale_and_add(z_one, g_ret_s(1)%matrix, z_one, g_ret_s(ipole)%matrix)
          END DO
 
          !Re(-i * (-2*pi*i*kB*T/(-pi) * [Re(G)+i*Im(G)]) == 2*kB*T * Re(G)

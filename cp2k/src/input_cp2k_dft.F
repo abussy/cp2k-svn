@@ -59,38 +59,39 @@ MODULE input_cp2k_dft
         general_roks, hf_model, high_spin_roks, history_guess, jacobian_fd1, &
         jacobian_fd1_backward, jacobian_fd1_central, jacobian_fd2, jacobian_fd2_backward, &
         kg_cholesky, kg_color_dsatur, kg_color_greedy, kg_ec_diagonalization, &
-        kg_ec_functional_harris, kg_tnadd_atomic, kg_tnadd_embed, kg_tnadd_none, ls_2pnt, ls_3pnt, &
-        ls_gold, ls_none, mao_basis_ext, mao_basis_orb, mao_basis_prim, mao_projection, &
-        mopac_guess, no_excitations, no_guess, numerical, oe_gllb, oe_lb, oe_none, oe_saop, &
-        oe_sic, op_loc_berry, op_loc_boys, op_loc_pipek, orb_dx2, orb_dxy, orb_dy2, orb_dyz, &
-        orb_dz2, orb_dzx, orb_px, orb_py, orb_pz, orb_s, ot_algo_irac, ot_algo_taylor_or_diag, &
-        ot_chol_irac, ot_lwdn_irac, ot_mini_broyden, ot_mini_cg, ot_mini_diis, ot_mini_sd, &
-        ot_poly_irac, ot_precond_full_all, ot_precond_full_kinetic, ot_precond_full_single, &
-        ot_precond_full_single_inverse, ot_precond_none, ot_precond_s_inverse, &
-        ot_precond_solver_default, ot_precond_solver_direct, ot_precond_solver_inv_chol, &
-        ot_precond_solver_update, outer_scf_basis_center_opt, outer_scf_becke_constraint, &
-        outer_scf_cdft_constraint, outer_scf_ddapc_constraint, outer_scf_hirshfeld_constraint, &
-        outer_scf_none, outer_scf_optimizer_bisect, outer_scf_optimizer_broyden, &
-        outer_scf_optimizer_diis, outer_scf_optimizer_newton, outer_scf_optimizer_newton_ls, &
-        outer_scf_optimizer_none, outer_scf_optimizer_sd, outer_scf_optimizer_secant, &
-        outer_scf_s2_constraint, plus_u_lowdin, plus_u_mulliken, plus_u_mulliken_charges, &
-        pw_interp, radius_covalent, radius_default, radius_single, radius_user, radius_vdw, &
-        random_guess, real_time_propagation, ref_charge_atomic, ref_charge_mulliken, rel_dkh, &
-        rel_none, rel_pot_erfc, rel_pot_full, rel_sczora_mp, rel_trans_atom, rel_trans_full, &
-        rel_trans_molecule, rel_zora, rel_zora_full, rel_zora_mp, restart_guess, rsdft_model, &
-        sccs_andreussi, sccs_derivative_cd3, sccs_derivative_cd5, sccs_derivative_cd7, &
-        sccs_derivative_fft, sccs_fattebert_gygi, shape_function_density, shape_function_gaussian, &
-        sic_ad, sic_eo, sic_list_all, sic_list_unpaired, sic_mauri_spz, sic_mauri_us, sic_none, &
-        slater, smear_energy_window, smear_fermi_dirac, smear_list, sparse_guess, &
-        spline3_nopbc_interp, spline3_pbc_interp, tddfpt_davidson, tddfpt_excitations, &
-        tddfpt_lanczos, tddfpt_singlet, tddfpt_triplet, use_coulomb, use_diff, use_no, &
-        use_restart_wfn, use_rt_restart, use_scf_wfn, wannier_projection, weight_type_mass, &
-        weight_type_unit, wfi_aspc_nr, wfi_frozen_method_nr, wfi_linear_p_method_nr, &
-        wfi_linear_ps_method_nr, wfi_linear_wf_method_nr, wfi_ps_method_nr, &
-        wfi_use_guess_method_nr, wfi_use_prev_p_method_nr, wfi_use_prev_rho_r_method_nr, &
-        wfi_use_prev_wf_method_nr, xas_1s_type, xas_2p_type, xas_2s_type, xas_dip_len, &
-        xas_dip_vel, xas_dscf, xas_none, xas_tp_fh, xas_tp_flex, xas_tp_hh, xas_tp_xfh, &
-        xas_tp_xhh, xes_tp_val, xas_not_excited, xas_tdp_by_kind, xas_tdp_by_index
+        kg_ec_functional_harris, kg_tnadd_atomic, kg_tnadd_embed, kg_tnadd_embed_ri, &
+        kg_tnadd_none, ls_2pnt, ls_3pnt, ls_gold, ls_none, mao_basis_ext, mao_basis_orb, &
+        mao_basis_prim, mao_projection, mopac_guess, no_excitations, no_guess, numerical, oe_gllb, &
+        oe_lb, oe_none, oe_saop, oe_sic, op_loc_berry, op_loc_boys, op_loc_pipek, orb_dx2, &
+        orb_dxy, orb_dy2, orb_dyz, orb_dz2, orb_dzx, orb_px, orb_py, orb_pz, orb_s, ot_algo_irac, &
+        ot_algo_taylor_or_diag, ot_chol_irac, ot_lwdn_irac, ot_mini_broyden, ot_mini_cg, &
+        ot_mini_diis, ot_mini_sd, ot_poly_irac, ot_precond_full_all, ot_precond_full_kinetic, &
+        ot_precond_full_single, ot_precond_full_single_inverse, ot_precond_none, &
+        ot_precond_s_inverse, ot_precond_solver_default, ot_precond_solver_direct, &
+        ot_precond_solver_inv_chol, ot_precond_solver_update, outer_scf_basis_center_opt, &
+        outer_scf_becke_constraint, outer_scf_cdft_constraint, outer_scf_ddapc_constraint, &
+        outer_scf_hirshfeld_constraint, outer_scf_none, outer_scf_optimizer_bisect, &
+        outer_scf_optimizer_broyden, outer_scf_optimizer_diis, outer_scf_optimizer_newton, &
+        outer_scf_optimizer_newton_ls, outer_scf_optimizer_none, outer_scf_optimizer_sd, &
+        outer_scf_optimizer_secant, outer_scf_s2_constraint, plus_u_lowdin, plus_u_mulliken, &
+        plus_u_mulliken_charges, pw_interp, radius_covalent, radius_default, radius_single, &
+        radius_user, radius_vdw, random_guess, real_time_propagation, ref_charge_atomic, &
+        ref_charge_mulliken, rel_dkh, rel_none, rel_pot_erfc, rel_pot_full, rel_sczora_mp, &
+        rel_trans_atom, rel_trans_full, rel_trans_molecule, rel_zora, rel_zora_full, rel_zora_mp, &
+        restart_guess, rsdft_model, sccs_andreussi, sccs_derivative_cd3, sccs_derivative_cd5, &
+        sccs_derivative_cd7, sccs_derivative_fft, sccs_fattebert_gygi, shape_function_density, &
+        shape_function_gaussian, sic_ad, sic_eo, sic_list_all, sic_list_unpaired, sic_mauri_spz, &
+        sic_mauri_us, sic_none, slater, smear_energy_window, smear_fermi_dirac, smear_list, &
+        sparse_guess, spline3_nopbc_interp, spline3_pbc_interp, tddfpt_davidson, &
+        tddfpt_excitations, tddfpt_lanczos, tddfpt_singlet, tddfpt_triplet, use_coulomb, use_diff, &
+        use_no, use_restart_wfn, use_rt_restart, use_scf_wfn, wannier_projection, &
+        weight_type_mass, weight_type_unit, wfi_aspc_nr, wfi_frozen_method_nr, &
+        wfi_linear_p_method_nr, wfi_linear_ps_method_nr, wfi_linear_wf_method_nr, &
+        wfi_ps_method_nr, wfi_use_guess_method_nr, wfi_use_prev_p_method_nr, &
+        wfi_use_prev_rho_r_method_nr, wfi_use_prev_wf_method_nr, xas_1s_type, xas_2p_type, &
+        xas_2s_type, xas_dip_len, xas_dip_vel, xas_dscf, xas_none, xas_tp_fh, xas_tp_flex, &
+        xas_tp_hh, xas_tp_xfh, xas_tp_xhh, xes_tp_val, xas_not_excited, xas_tdp_by_kind, &
+        xas_tdp_by_index
    USE input_cp2k_almo,                 ONLY: create_almo_scf_section
    USE input_cp2k_distribution,         ONLY: create_distribution_section
    USE input_cp2k_field,                ONLY: create_efield_section,&
@@ -1803,10 +1804,12 @@ CONTAINS
       !DOS from density matrix
       CALL cp_print_key_section_create(print_key, "ENERGY_WINDOWS", &
                                        description="Controls the printing of the DOS from the density matrix. "// &
-                                       "This allows the calculation of the DOS even in density matrix based/linear scaling. "// &
+                                       "This allows the calculation of the DOS even in density matrix based"// &
+                                       "REAL_TIME_PROPAGATION and LS_SCF. "// &
                                        "However, it requires a cubically scaling diagonalization of the Hamiltonian. "// &
                                        "Hartree-Fock NYI, values will be wrong. "// &
-                                       "Careful, the orbitals in rtp/emd are not actually eigenstates of the Hamiltonian.", &
+                                       "Careful, the orbitals in rtp/emd are not actually eigenstates of the Hamiltonian."// &
+                                       "Assumes absence of spin polarization (so far).", &
                                        print_level=high_print_level, common_iter_levels=3, &
                                        each_iter_names=s2a("MD"), each_iter_values=(/100/), &
                                        add_last=add_last_numeric, filename="energy-windows")
@@ -4797,7 +4800,7 @@ CONTAINS
 
       CALL keyword_create(keyword, name="transformation", &
                           description="Type of DKH transformation", &
-                          usage="transformation (FULL|MOLECULE|ATOM)", default_i_val=rel_trans_full, &
+                          usage="transformation (FULL|MOLECULE|ATOM)", default_i_val=rel_trans_atom, &
                           enum_c_vals=s2a("FULL", "MOLECULE", "ATOM"), &
                           enum_i_vals=(/rel_trans_full, rel_trans_molecule, rel_trans_atom/), &
                           enum_desc=s2a("Use full matrix transformation", &
@@ -5179,6 +5182,16 @@ CONTAINS
 
       NULLIFY (keyword, subsection, print_key)
 
+      ! add a XC section
+      CALL create_xc_section(subsection)
+      CALL section_add_subsection(section, subsection)
+      CALL section_release(subsection)
+
+      ! add LRI section
+      CALL create_lrigpw_section(subsection)
+      CALL section_add_subsection(section, subsection)
+      CALL section_release(subsection)
+
       CALL keyword_create(keyword, name="COLORING_METHOD", &
                           description="Which algorithm to use for coloring.", &
                           usage="COLORING_METHOD GREEDY", &
@@ -5194,11 +5207,12 @@ CONTAINS
                           description="Algorithm to use for the calculation of the nonadditive kinetic energy.", &
                           usage="TNADD_METHOD ATOMIC", &
                           default_i_val=kg_tnadd_embed, &
-                          enum_c_vals=s2a("EMBEDDING", "ATOMIC", "NONE"), &
+                          enum_c_vals=s2a("EMBEDDING", "RI_EMBEDDING", "ATOMIC", "NONE"), &
                           enum_desc=s2a("Use full embedding potential (see Iannuzzi et al)", &
+                                        "Use full embedding potential with RI density fitting", &
                                         "Use sum of atomic model potentials", &
                                         "Do not use kinetic energy embedding"), &
-                          enum_i_vals=(/kg_tnadd_embed, kg_tnadd_atomic, kg_tnadd_none/))
+                          enum_i_vals=(/kg_tnadd_embed, kg_tnadd_embed_ri, kg_tnadd_atomic, kg_tnadd_none/))
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
@@ -5830,6 +5844,20 @@ CONTAINS
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
+      CALL keyword_create(keyword, name="PPL_RI", &
+                          description="Use LRI/RI for local pseudopotential.", &
+                          usage="PPL_RI TRUE", &
+                          default_l_val=.FALSE., lone_keyword_l_val=.TRUE.)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="RI_STATISTIC", &
+                          description="Print statistical information on the RI calculation.", &
+                          usage="RI_STATISTIC TRUE", &
+                          default_l_val=.FALSE., lone_keyword_l_val=.TRUE.)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
       CALL keyword_create(keyword, name="DISTANT_PAIR_APPROXIMATION", &
                           description="Calculate distant pairs using an independent atom approximation.", &
                           usage="DISTANT_PAIR_APPROXIMATION TRUE", &
@@ -5975,7 +6003,7 @@ CONTAINS
       CPASSERT(.NOT. ASSOCIATED(section))
       CALL section_create(section, name="OPT_EMBED", &
                           description="This section specifies optional parameters for DFT embedding potential optimization.", &
-                          n_keywords=10, n_subsections=0, repeats=.FALSE.)
+                          n_keywords=12, n_subsections=0, repeats=.FALSE.)
 
       NULLIFY (keyword)
 
@@ -6008,6 +6036,20 @@ CONTAINS
       CALL keyword_release(keyword)
 
       CALL keyword_create(keyword, name="DENS_CONV_INT", &
+                          description="Convergence criterion for "// &
+                          "the integrated electron density difference.", &
+                          usage="DENS_CONV_INT 0.1", default_r_val=0.1_dp)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="SPIN_DENS_CONV_MAX", &
+                          description="Convergence criterion for "// &
+                          "the maximum electron density difference.", &
+                          usage="DENS_CONV_MAX 0.01", default_r_val=0.01_dp)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="SPIN_DENS_CONV_INT", &
                           description="Convergence criterion for "// &
                           "the integrated electron density difference.", &
                           usage="DENS_CONV_INT 0.1", default_r_val=0.1_dp)
