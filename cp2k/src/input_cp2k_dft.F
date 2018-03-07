@@ -5463,7 +5463,7 @@ CONTAINS
 
       CALL keyword_create(keyword, name="JACOBIAN_STEP", &
                           description="Step size to use in the calculation of the inverse Jacobian with finite differences.", &
-                          usage="JACOBIAN_STEP 1.0E-4 ", default_r_val=1.0E-4_dp)
+                          usage="JACOBIAN_STEP 5.0E-3 ", default_r_val=5.0E-3_dp)
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
@@ -5553,8 +5553,9 @@ CONTAINS
       CALL keyword_create(keyword, name="STEP_SIZE", &
                           description="The initial step_size used in the optimizer (currently steepest descent). "// &
                           "Note that in cases where a sadle point is sought for (constrained DFT),"// &
-                          " this can be negative. For Newton and Broyden optimizers, use a value less than "// &
-                          "the default 1.0 (in absolute value, the sign is not significant) to active a damped optimizer.", &
+                          " this can be negative. For Newton and Broyden optimizers, use a value less/higher than "// &
+                          "the default 1.0 (in absolute value, the sign is not significant) to active an under/overrelaxed "// &
+                          "optimizer.", &
                           usage="STEP_SIZE -1.0", default_r_val=0.5_dp)
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
@@ -7575,7 +7576,7 @@ CONTAINS
 
       CALL keyword_create(keyword, name="STATE_TYPE", &
                           variants=(/"TYPE"/), &
-                          description="Type of the orbitas that are excited for the xas spectra calculation", &
+                          description="Type of the orbitals that are excited for the xas spectra calculation", &
                           usage="STATE_TYPE 1S", &
                           default_i_val=xas_1s_type, &
                           enum_c_vals=s2a("1S", "2S", "2P"), &
@@ -7588,6 +7589,13 @@ CONTAINS
                           description="# of states where to look for the one to be excited", &
                           usage="STATE_SEARCH 1", &
                           default_i_val=-1)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="SPIN_CHANNEL", &
+                          description="# Spin channel of the excited orbital", &
+                          usage="SPIN_CHANNEL 1", &
+                          default_i_val=1)
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 

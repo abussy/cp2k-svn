@@ -521,7 +521,7 @@ CONTAINS
 
       IF (scf_control%level_shift /= 0.0_dp) scf_control%use_cholesky = .FALSE.
       IF (scf_control%use_ot .AND. (scf_control%density_guess == core_guess)) THEN
-         CPABORT("Use GUESS {ATOMIC,RESTART,RANDOM} with OT")
+         CPABORT("SCF_GUESS CORE is not supported for OT")
       END IF
 
       outer_scf_section => section_vals_get_subs_vals(scf_section, "OUTER_SCF")
@@ -560,7 +560,7 @@ CONTAINS
              scf_control%outer_scf%factor_ls .GE. 1.0_dp) &
             CALL cp_abort(__LOCATION__, &
                           "Illegal value for keyword FACTOR_LS.")
-         IF (exists .AND. ABS(scf_control%outer_scf%step_size) .LE. 1.0_dp) THEN
+         IF (exists) THEN
             scf_control%outer_scf%newton_step = ABS(scf_control%outer_scf%step_size)
             ! Permanent copy needed in case line search is performed
             scf_control%outer_scf%newton_step_save = scf_control%outer_scf%newton_step
