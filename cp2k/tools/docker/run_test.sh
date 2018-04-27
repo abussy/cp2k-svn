@@ -11,13 +11,13 @@ fi
 set -e
 TESTNAME=$1
 echo "Running ${TESTNAME} ..."
-CP2K_LOCAL=`realpath ../../`
+CP2K_LOCAL=`realpath ../../../`
 
 echo -n "Date: "
 date --utc --rfc-3339=seconds
-echo ""
-git log -1 --pretty="format:CommitSHA: %H%nCommitTime: %ci%nCommitAuthor: %an%nCommitSubject: %s%n"
-echo ""
+if git rev-parse; then
+  git log -1 --pretty="%nCommitSHA: %H%nCommitTime: %ci%nCommitAuthor: %an%nCommitSubject: %s%n"
+fi
 
 set -x
 docker build -t img_cp2k_test_${TESTNAME} ./test_${TESTNAME}/
