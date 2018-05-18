@@ -2952,6 +2952,13 @@ CONTAINS
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
+      CALL keyword_create(keyword, name="DFET_EMBEDDED", &
+                          description="Calculation with DFT-embedding potential. ", &
+                          usage="DFET_EMBEDDED FALSE", &
+                          default_l_val=.FALSE., lone_keyword_l_val=.TRUE.)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
       ! Integers
       CALL keyword_create(keyword, name="LMAXN1", &
                           variants=(/"LMAXRHO1"/), &
@@ -3101,6 +3108,30 @@ CONTAINS
                                         "Numerical integration on real space grid. Lumped together with core charge"), &
                           enum_i_vals=(/do_ppl_analytic, do_ppl_grid/), &
                           default_i_val=do_ppl_analytic)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="EMBED_RESTART_FILE_NAME", &
+                          description="Root of the file name where to read the embedding "// &
+                          "potential guess.", &
+                          usage="EMBED_RESTART_FILE_NAME <FILENAME>", &
+                          type_of_var=lchar_t)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="EMBED_CUBE_FILE_NAME", &
+                          description="Root of the file name where to read the embedding "// &
+                          "potential (guess) as a cube.", &
+                          usage="EMBED_CUBE_FILE_NAME <FILENAME>", &
+                          type_of_var=lchar_t)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="EMBED_SPIN_CUBE_FILE_NAME", &
+                          description="Root of the file name where to read the spin part "// &
+                          "of the embedding potential (guess) as a cube.", &
+                          usage="EMBED_SPIN_CUBE_FILE_NAME <FILENAME>", &
+                          type_of_var=lchar_t)
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
@@ -5946,7 +5977,7 @@ CONTAINS
       CPASSERT(.NOT. ASSOCIATED(section))
       CALL section_create(section, name="OPT_EMBED", &
                           description="This section specifies optional parameters for DFT embedding potential optimization.", &
-                          n_keywords=12, n_subsections=3, repeats=.FALSE.)
+                          n_keywords=15, n_subsections=3, repeats=.FALSE.)
 
       NULLIFY (keyword)
 
@@ -6030,10 +6061,33 @@ CONTAINS
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
 
+      CALL keyword_create(keyword, name="READ_EMBED_POT_CUBE", &
+                          description="Read the embedding potential  "// &
+                          "(restart) from the cube file.", &
+                          usage="READ_EMBED_POT_CUBE .FALSE.", default_l_val=.FALSE.)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
       CALL keyword_create(keyword, name="EMBED_RESTART_FILE_NAME", &
                           description="Root of the file name where to read the embedding "// &
                           "potential guess.", &
                           usage="EMBED_RESTART_FILE_NAME <FILENAME>", &
+                          type_of_var=lchar_t)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="EMBED_CUBE_FILE_NAME", &
+                          description="Root of the file name where to read the embedding "// &
+                          "potential (guess) as a cube.", &
+                          usage="EMBED_CUBE_FILE_NAME <FILENAME>", &
+                          type_of_var=lchar_t)
+      CALL section_add_keyword(section, keyword)
+      CALL keyword_release(keyword)
+
+      CALL keyword_create(keyword, name="EMBED_SPIN_CUBE_FILE_NAME", &
+                          description="Root of the file name where to read the spin part "// &
+                          "of the embedding potential (guess) as a cube.", &
+                          usage="EMBED_SPIN_CUBE_FILE_NAME <FILENAME>", &
                           type_of_var=lchar_t)
       CALL section_add_keyword(section, keyword)
       CALL keyword_release(keyword)
