@@ -631,6 +631,11 @@ MODULE input_constants
                                                xas_tdp_by_kind = 2, &
                                                xas_tdp_exop_coulomb = 1
 
+   ! Form of dipole operator for TDDFPT oscillator strength calculation
+   INTEGER, PARAMETER, PUBLIC               :: tddfpt_dipole_berry = 1, &
+                                               tddfpt_dipole_length = 2, &
+                                               tddfpt_dipole_velocity = 3
+
    ! Linear Response for properties
    INTEGER, PARAMETER, PUBLIC               :: lr_none = 0, &
                                                lr_chemshift = 1, &
