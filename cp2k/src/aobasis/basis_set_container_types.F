@@ -37,7 +37,8 @@ MODULE basis_set_container_types
                                                aux_gw_basis = 110, &
                                                ri_hxc_basis = 111, &
                                                ri_k_basis = 112, &
-                                               ri_xas_basis = 113
+                                               ri_xas_basis = 113, &
+                                               ri_xas_soft_basis = 114
 ! **************************************************************************************************
    TYPE basis_set_container_type
       PRIVATE
@@ -116,6 +117,8 @@ CONTAINS
          basis_type_nr = aux_gw_basis
       CASE ("RI_XAS")
          basis_type_nr = ri_xas_basis
+      CASE ("RI_XAS_SOFT")
+         basis_type_nr = ri_xas_soft_basis
       CASE DEFAULT
          basis_type_nr = unknown_basis
       END SELECT
