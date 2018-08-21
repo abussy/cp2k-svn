@@ -1948,7 +1948,7 @@ CONTAINS
       CALL cp_fm_struct_release(fm_struct)
       CALL cp_fm_release(work_fm)
 
-!     Get the 2-center integrel (Q|fxc|R) as an array (a block from a dbcsr matrix)
+!     Get the 2-center integral (Q|fxc|R) as an array (a block from a dbcsr matrix)
 !     For now assume serial => don't check for which proc the block is on
 !     TODO: maybe that storing the atom integrals in a dbcsr matrix is not the best
       found_block = .FALSE.
